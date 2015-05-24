@@ -1,6 +1,7 @@
 package disk
 
 import (
+	"bytes"
 	"os"
 	"path"
 	"testing"
@@ -43,11 +44,7 @@ func setUpDiskTestFile(length int64, blockSize int64, t *testing.T) (string, *os
 	return fileName, f
 }
 
-func TestReadBlock(t *testing.T) {
-	// TODO (yutongp): add ReadAt test
-}
-
-func TestWriteBlock(t *testing.T) {
+func TestReadWriteDisk(t *testing.T) {
 	tests := []struct {
 		dataSize  int64
 		blockSize int64
@@ -96,33 +93,48 @@ func TestWriteBlock(t *testing.T) {
 		for i := int64(0); i < tt.writeLen; i++ {
 			p[i] = 'X'
 		}
-		_, err := WriteAt(filePath, p, tt.offSet)
+		rn, err := WriteAt(filePath, p, tt.offSet)
 		if err != nil {
 			t.Errorf("%d: error = %v", i, err)
 		}
 
+		// check the data size
 		dSize := getDataLength(f, tt.blockSize)
 		if dSize != expectedDSize {
 			t.Errorf("%d: expect data length %d, got %d", i, expectedDSize, dSize)
 		}
+
+		// read out written data
+		r := make([]byte, tt.writeLen)
+		wn, err := ReadAt(filePath, r, tt.offSet)
+		if err != nil {
+			t.Errorf("%d: error = %v", i, err)
+		}
+
+		// check read length
+		if rn != wn {
+			t.Errorf("%d: read out length %d not equal to write in length %d",
+				i, rn, wn)
+		}
+
+		// check data
+		if !bytes.Equal(p, r) {
+			t.Errorf("%d: read data %x not equal to write in data %x", i, r, p)
+		}
 	}
 }
 
-func TestWriteNonExistFile(t *testing.T) {
+func TestReadNonExistFile(t *testing.T) {
 	tests := []struct {
-		filePath  string
-		blockSize int64
-		offSet    int64
-		writeLen  int64
+		filePath string
+		offSet   int64
+		readLen  int64
 	}{
-		{"nowhere_exist", 4096, 0, 50},
+		{"nowhere_exist", 0, 50},
 	}
 	for i, tt := range tests {
-		p := make([]byte, tt.writeLen)
-		for i := int64(0); i < tt.writeLen; i++ {
-			p[i] = 'X'
-		}
-		_, err := WriteAt(tt.filePath, p, tt.offSet)
+		p := make([]byte, tt.readLen)
+		_, err := ReadAt(tt.filePath, p, tt.offSet)
 		if !os.IsNotExist(err) {
 			t.Errorf("%d: expect file not exist, got error = %v", i, err)
 		}
